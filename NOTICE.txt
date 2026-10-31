@@ -1,0 +1,6 @@
+FlowBridge 0.1.1
+Copyright (c) 2026 FlowBridge contributors. MIT License.
+Independent project; not affiliated with Google or Mozilla.
+No Google frontend bundle or third-party FlowFix source is distributed.
+The bridge icon was created for this project with an image-generation tool.
+Firefox signatures in the included XPI were issued by Mozilla.
