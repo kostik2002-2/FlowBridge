@@ -14,6 +14,10 @@ using System.Windows.Automation;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
+[assembly: System.Reflection.AssemblyVersion("0.1.2.0")]
+[assembly: System.Reflection.AssemblyFileVersion("0.1.2.0")]
+[assembly: System.Reflection.AssemblyInformationalVersion("0.1.2")]
+
 namespace FlowBridge {
   public sealed class Browser {
     public string Id, Name, ProcessName, Url, Path, Status;
