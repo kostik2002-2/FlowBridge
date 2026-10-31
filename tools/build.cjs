@@ -6,7 +6,10 @@ const engine = '/* FlowBridge 0.1.1 — independently authored preview */\n(() =
 const icons = Object.fromEntries([16,20,24,32,40,48,64,96,128,256].map(size=>[String(size),'icon-'+size+'.png']));
 const manifest = { icons, manifest_version: 3, name: 'FlowBridge Preview', version: '0.1.1', description: 'Помощник совместимости Google Flow. Предварительная версия.', permissions: ['tabs', 'cookies'], host_permissions: ['https://flow.google.com/*'], action: { default_popup: 'popup.html', default_icon: icons, default_title: 'FlowBridge' }, content_scripts: [{ matches: ['https://flow.google.com/*'], js: ['content.js'], run_at: 'document_start' }, { matches: ['https://flow.google.com/*'], js: ['engine.js'], run_at: 'document_start', world: 'MAIN' }] };
 for (const flavor of ['chromium','firefox']) {
-  const folder = path.join(root, 'package', 'extension', flavor); fs.mkdirSync(folder, {recursive:true});
+  const folder = path.join(root, 'package', 'extension', flavor);
+  // These are generated build outputs; never carry stale files into a new package.
+  fs.rmSync(folder, {recursive:true, force:true});
+  fs.mkdirSync(folder, {recursive:true});
   const config = structuredClone(manifest);
   if (flavor === 'chromium') config.minimum_chrome_version = '120';
   else config.browser_specific_settings = { gecko: { id: 'flowbridge-preview@local.invalid', strict_min_version: '142.0', data_collection_permissions: { required: ['none'] } } };

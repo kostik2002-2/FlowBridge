@@ -5,8 +5,8 @@ $csc=Join-Path $runtime 'csc.exe'
 $output=Join-Path $project 'package\FlowBridge-Setup.exe'
 $references=@('System.Windows.Forms.dll','System.Drawing.dll', (Join-Path $runtime 'WPF\UIAutomationClient.dll'),(Join-Path $runtime 'WPF\UIAutomationTypes.dll'),(Join-Path $runtime 'WPF\WindowsBase.dll'))
 $icon=Join-Path $project 'assets\flowbridge.ico'
-if(!(Test-Path $icon)){throw 'Build icon assets first: tools/build-icons.ps1'}
-$arguments=@('/nologo','/target:winexe','/platform:anycpu','/optimize+',('/out:'+$output),('/win32icon:'+$icon))
+if(!(Test-Path $icon)){throw 'Missing assets/flowbridge.ico. Restore the tracked icon assets before building.'}
+$arguments=@('/nologo','/target:winexe','/platform:anycpu','/optimize+','/warn:4','/warnaserror+',('/out:'+$output),('/win32icon:'+$icon))
 foreach($r in $references){$arguments+=('/reference:'+$r)}
 $arguments+=(Join-Path $PSScriptRoot 'Setup.cs')
 $arguments+=(Join-Path $PSScriptRoot 'FirefoxInstaller.cs')

@@ -63,11 +63,18 @@ XPI подписан Mozilla; **Windows EXE не подписан сертифи
 node tools/build.cjs
 node --test
 node tools/verify-icons.cjs
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/verify-firefox.ps1
 node tools/payload.cjs
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File installer/build.ps1
 ```
 
-Результат: `package/FlowBridge-Setup.exe`.
+Результат: `package/FlowBridge-Setup.exe`. Предупреждения компилятора считаются ошибками.
+
+Для интерактивной проверки установщика откройте обычную страницу в Chrome с уже установленным FlowBridge и выполните:
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/installer-smoke.ps1 -Browser chrome
+```
+Проверка открывает и закрывает служебную вкладку расширений; генерацию не запускает.
 Код расширения находится в `src/`, установщика — в `installer/`, тесты — в `tests/`.
 Подписанный Firefox XPI 0.1.1 включён в репозиторий как входной файл сборки;
 его SHA-256 проверяется при упаковке и перед установкой.
@@ -76,6 +83,10 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File installer/build.ps1
 `tools/build.cjs` создаёт неподписанные расширения; готовый подписанный XPI он не изменяет.
 Сборка EXE использует именно проверенный подписанный XPI.
 Нельзя выдать пересобранное изменённое расширение за уже подписанный файл.
+
+## Установщик 0.1.4
+
+Проведена очистка установщика и сборки: удалены устаревшие ветки и неподписанная копия Firefox из EXE. Поиск элементов браузера исключает содержимое веб-страниц; повторная установка сбрасывает устаревшую привязку к окну. Добавлены проверки упаковки и соответствия исходников подписанному XPI. [Отчёт аудита и ограничения](docs/code-audit.md).
 
 ## Установщик 0.1.3
 
@@ -88,7 +99,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File installer/build.ps1
 ## Проверки и ограничения
 
 Версия 0.1.1 поддерживает фабрики вычислений V и W после изменения кода Flow.
-14 автоматических тестов проверяют точность изменения, сохранение возрастной проверки,
+15 автоматических тестов проверяют точность изменения, сохранение возрастной проверки,
 очистку cookies и сохранение посторонних вкладок. Механизм и интерфейс Flow проверялись локально;
 генерация в рамках автоматической проверки не запускалась.
 

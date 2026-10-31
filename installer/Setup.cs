@@ -14,16 +14,15 @@ using System.Windows.Automation;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
-[assembly: System.Reflection.AssemblyVersion("0.1.3.0")]
-[assembly: System.Reflection.AssemblyFileVersion("0.1.3.0")]
-[assembly: System.Reflection.AssemblyInformationalVersion("0.1.3")]
+[assembly: System.Reflection.AssemblyVersion("0.1.4.0")]
+[assembly: System.Reflection.AssemblyFileVersion("0.1.4.0")]
+[assembly: System.Reflection.AssemblyInformationalVersion("0.1.4")]
 
 namespace FlowBridge {
   public sealed class Browser {
-    public string Id, Name, ProcessName, Url, Path, Status;
-    public bool CanInstall;
+    public string Id, Name, ProcessName, Url, Path;
     public IntPtr WindowHandle;
-    public override string ToString(){return CanInstall?Name:Name+" — нужна подпись";}
+    public override string ToString(){return Name;}
   }
   public static class Native {
     [StructLayout(LayoutKind.Sequential)]public struct MouseInput {public int x,y;public uint data,flags,time;public UIntPtr extra;}
@@ -79,31 +78,30 @@ namespace FlowBridge {
     public const string ExtensionVersion="0.1.1";
     public static readonly string Destination=System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"FlowBridge","versions",Version);
     public static List<Browser> Detect() {
-      string local=Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), pf=Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), pf86=Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), roaming=Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+      string local=Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), pf=Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), pf86=Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
       var rows=new List<Browser> {
-        Make("chrome","Google Chrome","chrome","chrome://extensions/",true,new[]{pf+@"\Google\Chrome\Application\chrome.exe",pf86+@"\Google\Chrome\Application\chrome.exe",local+@"\Google\Chrome\Application\chrome.exe"}),
-        Make("comet","Comet","comet","comet://extensions/",true,new[]{local+@"\Perplexity\Comet\Application\comet.exe"}),
-        Make("edge","Microsoft Edge","msedge","edge://extensions/",true,new[]{pf86+@"\Microsoft\Edge\Application\msedge.exe",pf+@"\Microsoft\Edge\Application\msedge.exe"}),
-        Make("opera","Opera","opera","opera://extensions/",true,new[]{local+@"\Programs\Opera\opera.exe",local+@"\Programs\Opera\launcher.exe",pf+@"\Opera\opera.exe",pf+@"\Opera\launcher.exe",pf86+@"\Opera\opera.exe",pf86+@"\Opera\launcher.exe"}),
-        Make("yandex","Яндекс Браузер","browser","browser://extensions/",true,new[]{local+@"\Yandex\YandexBrowser\Application\browser.exe",pf+@"\Yandex\YandexBrowser\Application\browser.exe",pf86+@"\Yandex\YandexBrowser\Application\browser.exe"}),
-        Make("firefox","Mozilla Firefox","firefox","about:addons",true,new[]{pf+@"\Mozilla Firefox\firefox.exe",pf86+@"\Mozilla Firefox\firefox.exe"})
+        Make("chrome","Google Chrome","chrome","chrome://extensions/",new[]{pf+@"\Google\Chrome\Application\chrome.exe",pf86+@"\Google\Chrome\Application\chrome.exe",local+@"\Google\Chrome\Application\chrome.exe"}),
+        Make("comet","Comet","comet","comet://extensions/",new[]{local+@"\Perplexity\Comet\Application\comet.exe"}),
+        Make("edge","Microsoft Edge","msedge","edge://extensions/",new[]{pf86+@"\Microsoft\Edge\Application\msedge.exe",pf+@"\Microsoft\Edge\Application\msedge.exe"}),
+        Make("opera","Opera","opera","opera://extensions/",new[]{local+@"\Programs\Opera\opera.exe",local+@"\Programs\Opera\launcher.exe",pf+@"\Opera\opera.exe",pf+@"\Opera\launcher.exe",pf86+@"\Opera\opera.exe",pf86+@"\Opera\launcher.exe"}),
+        Make("yandex","Яндекс Браузер","browser","browser://extensions/",new[]{local+@"\Yandex\YandexBrowser\Application\browser.exe",pf+@"\Yandex\YandexBrowser\Application\browser.exe",pf86+@"\Yandex\YandexBrowser\Application\browser.exe"}),
+        Make("firefox","Mozilla Firefox","firefox","about:addons",new[]{pf+@"\Mozilla Firefox\firefox.exe",pf86+@"\Mozilla Firefox\firefox.exe"})
       };
       foreach(var row in rows) {
         if(row.Path==null) {
           foreach(var p in Process.GetProcessesByName(row.ProcessName)) { try { var candidate=p.MainModule.FileName;if(File.Exists(candidate)){row.Path=candidate;break;} }catch{} }
         }
-        row.Status=row.Path==null?"Браузер не найден":"Готов к пробной установке";
       }
       return rows.Where(b=>b.Path!=null&&File.Exists(b.Path)).ToList();
     }
-    static Browser Make(string id,string name,string process,string url,bool install,string[] paths) {
+    static Browser Make(string id,string name,string process,string url,string[] paths) {
       string found=paths.FirstOrDefault(File.Exists);
       if(found==null) {
         foreach(var hive in new[]{Registry.CurrentUser,Registry.LocalMachine}) {
           try { using(var key=hive.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\"+process+".exe")){var candidate=key==null?null:key.GetValue("") as string;if(candidate!=null&&File.Exists(candidate.Trim('"'))){found=candidate.Trim('"');break;}} }catch{}
         }
       }
-      return new Browser{Id=id,Name=name,ProcessName=process,Url=url,CanInstall=install,Path=found};
+      return new Browser{Id=id,Name=name,ProcessName=process,Url=url,Path=found};
     }
     public static void Prepare() {
       foreach(var entry in Payload.Files) {
@@ -123,21 +121,21 @@ namespace FlowBridge {
     static AutomationElement Named(AutomationElement root,string name) {
       return root.FindFirst(TreeScope.Descendants,new PropertyCondition(AutomationElement.NameProperty,name));
     }
+    static bool IsBrowserControl(AutomationElement node,AutomationElement root) {
+      for(var parent=TreeWalker.ControlViewWalker.GetParent(node);parent!=null&&!Automation.Compare(parent,root);parent=TreeWalker.ControlViewWalker.GetParent(parent)){
+        if(parent.Current.ControlType==ControlType.Document)return false;
+      }
+      return true;
+    }
     static AutomationElement BrowserButton(AutomationElement root,string name) {
       var buttons=root.FindAll(TreeScope.Descendants,new AndCondition(new PropertyCondition(AutomationElement.NameProperty,name),new PropertyCondition(AutomationElement.ControlTypeProperty,ControlType.Button)));
       for(int i=0;i<buttons.Count;i++){
-        var node=TreeWalker.ControlViewWalker.GetParent(buttons[i]);bool webpage=false;
-        while(node!=null&&!Automation.Compare(node,root)){
-          if(node.Current.ControlType==ControlType.Document){webpage=true;break;}
-          node=TreeWalker.ControlViewWalker.GetParent(node);
-        }
-        if(!webpage)return buttons[i];
+        if(IsBrowserControl(buttons[i],root))return buttons[i];
       }
       return null;
     }
     static AutomationElement ExtensionLabel(AutomationElement root) {
-      var doc=root;
-      return doc.FindFirst(TreeScope.Descendants,new AndCondition(new PropertyCondition(AutomationElement.NameProperty,"FlowBridge Preview"),new PropertyCondition(AutomationElement.ControlTypeProperty,ControlType.Text)));
+      return root.FindFirst(TreeScope.Descendants,new AndCondition(new PropertyCondition(AutomationElement.NameProperty,"FlowBridge Preview"),new PropertyCondition(AutomationElement.ControlTypeProperty,ControlType.Text)));
     }
     static string InstalledChromiumVersion(AutomationElement root) {
       var node=ExtensionLabel(root);
@@ -156,7 +154,7 @@ namespace FlowBridge {
     }
     static AutomationElement Developer(AutomationElement root){return Find(root,"devMode")??Find(root,"dev-switch");}
     static AutomationElement LoadButton(AutomationElement root){return Find(root,"loadUnpacked")??Named(root,"Загрузить распакованное расширение")??Named(root,"Загрузить распакованное")??Named(root,"Load unpacked extension")??Named(root,"Load unpacked");}
-    static AutomationElement BrowserRoot(Browser browser,int timeout,bool extensions) {
+    static AutomationElement BrowserRoot(Browser browser,int timeout) {
       DateTime until=DateTime.UtcNow.AddSeconds(timeout);
       do {
         var handles=browser.WindowHandle!=IntPtr.Zero
@@ -166,7 +164,6 @@ namespace FlowBridge {
           try {
             var root=AutomationElement.FromHandle(hwnd);
             if(root.Current.ProcessId==0||BrowserAddress(browser,root)==null)continue;
-            if(extensions&&Developer(root)==null&&LoadButton(root)==null)continue;
             browser.WindowHandle=hwnd;
             return root;
           }catch{}
@@ -176,12 +173,16 @@ namespace FlowBridge {
       throw new InvalidOperationException("Не удалось дождаться окна браузера. Повторите установку.");
     }
     static AutomationElement BrowserAddress(Browser browser,AutomationElement root) {
-      if(browser.Id=="firefox")return Find(root,"urlbar-input");
+      if(browser.Id=="firefox"){
+        var firefoxAddress=Find(root,"urlbar-input");
+        return firefoxAddress!=null&&IsBrowserControl(firefoxAddress,root)?firefoxAddress:null;
+      }
       string id=browser.Id=="opera"?"view_1005":browser.Id=="yandex"?"view_1018":browser.Id=="edge"?"view_1017":browser.Id=="chrome"?"view_1012":"view_1020";
       var address=Find(root,id);
-      if(address!=null&&address.Current.ControlType==ControlType.Edit)return address;
+      if(address!=null&&address.Current.ControlType==ControlType.Edit&&IsBrowserControl(address,root))return address;
       var edits=root.FindAll(TreeScope.Descendants,new PropertyCondition(AutomationElement.ControlTypeProperty,ControlType.Edit));
       for(int i=0;i<edits.Count;i++){
+        if(!IsBrowserControl(edits[i],root))continue;
         var name=(edits[i].Current.Name??"").ToLowerInvariant();
         if(name.Contains("адресная строка")||name.Contains("address")||name.Contains("поисковый запрос"))return edits[i];
       }
@@ -200,12 +201,7 @@ namespace FlowBridge {
     static int BrowserTabCount(AutomationElement root) {
       var tabs=root.FindAll(TreeScope.Descendants,new PropertyCondition(AutomationElement.ControlTypeProperty,ControlType.TabItem));int count=0;
       for(int i=0;i<tabs.Count;i++){
-        var parent=TreeWalker.ControlViewWalker.GetParent(tabs[i]);bool page=false;
-        while(parent!=null&&!Automation.Compare(parent,root)){
-          if(parent.Current.ControlType==ControlType.Document){page=true;break;}
-          parent=TreeWalker.ControlViewWalker.GetParent(parent);
-        }
-        if(!page)count++;
+        if(IsBrowserControl(tabs[i],root))count++;
       }
       return count;
     }
@@ -215,12 +211,12 @@ namespace FlowBridge {
     static AutomationElement Open(Browser browser,string url) {return Navigate(browser,url,true);}
     static AutomationElement Navigate(Browser browser,string url,bool newTab) {
       AutomationElement root;bool started=false;
-      try{root=BrowserRoot(browser,1,false);}
+      try{root=BrowserRoot(browser,1);}
       catch{
         if(browser.WindowHandle!=IntPtr.Zero)throw;
         // Pass the service URL on the first launch; do not race a second process against startup.
         Process.Start(new ProcessStartInfo(browser.Path){Arguments=(browser.Id=="firefox"?"-new-tab ":"--new-tab ")+"\""+url+"\"",UseShellExecute=true});
-        started=true;root=BrowserRoot(browser,30,false);
+        started=true;root=BrowserRoot(browser,30);
       }
       var until=DateTime.UtcNow.AddSeconds(30);
       while(BrowserAddress(browser,root)==null&&DateTime.UtcNow<until)Thread.Sleep(200);
@@ -310,7 +306,7 @@ namespace FlowBridge {
     }
     static string FinishInstallation(Browser browser,Action<string> log) {
       try {
-        var root=BrowserRoot(browser,5,false);
+        var root=BrowserRoot(browser,5);
         string id=ExtensionId(root);
         // Reuse our service tab in the same window, including Opera and Yandex.
         Navigate(browser,"chrome-extension://"+id+"/complete.html",false);
@@ -344,8 +340,9 @@ namespace FlowBridge {
       SendKeys.SendWait("{ESC}");SendKeys.SendWait("^w");Thread.Sleep(350);
     }
     public static string Install(Browser browser,Action<string> log) {
-      if(!browser.CanInstall)throw new InvalidOperationException(browser.Status);
-      if(browser.Path==null)throw new InvalidOperationException("Браузер не найден на компьютере.");
+      if(browser.Path==null||!File.Exists(browser.Path))throw new InvalidOperationException("Браузер не найден на компьютере.");
+      // Window binding belongs to one installation, not the lifetime of the selector item.
+      browser.WindowHandle=IntPtr.Zero;
       if(browser.Id=="firefox")return InstallFirefox(browser,log);
       log("Проверяем расширение: "+browser.Name);
       var root=Open(browser,browser.Url);
@@ -391,8 +388,8 @@ namespace FlowBridge {
       throw new InvalidOperationException("Браузер не подтвердил установку. Проверьте сообщение на странице расширений.");
     }
     public static string Check(Browser browser) {
-      if(browser.Path==null)throw new InvalidOperationException("Браузер не найден.");
-      if(!browser.CanInstall)throw new InvalidOperationException(browser.Status);
+      if(browser.Path==null||!File.Exists(browser.Path))throw new InvalidOperationException("Браузер не найден.");
+      browser.WindowHandle=IntPtr.Zero;
       var page=Open(browser,"https://flow.google.com/");
       DateTime until=DateTime.UtcNow.AddSeconds(18);
       do {
@@ -427,15 +424,15 @@ namespace FlowBridge {
       status.Bounds=new Rectangle(24,242,312,38);status.TextAlign=ContentAlignment.TopCenter;
       Controls.AddRange(new Control[]{list,install,status});AcceptButton=install;
       Shown+=(sender,e)=>{
-        foreach(var b in Engine.Detect().Where(b=>b.Path!=null))list.Items.Add(b);
+        foreach(var b in Engine.Detect())list.Items.Add(b);
         if(list.Items.Count>0)list.SelectedIndex=0;
         else{install.Enabled=false;status.Text="Браузеры не найдены";}
       };
       list.SelectedIndexChanged+=(sender,e)=>{
         var browser=list.SelectedItem as Browser;
-        install.Enabled=browser!=null&&browser.CanInstall;
+        install.Enabled=browser!=null;
         status.ForeColor=Color.DimGray;
-        status.Text=browser!=null&&!browser.CanInstall?browser.Status:"";
+        status.Text="";
       };
       install.Click+=async(sender,e)=>await InstallSelected();
     }
@@ -449,12 +446,12 @@ namespace FlowBridge {
       install.Enabled=list.Enabled=false;status.ForeColor=Color.DimGray;status.Text="Установка…";
       try{string result=await RunInstall(browser);status.ForeColor=Color.FromArgb(25,115,65);status.Text=result;}
       catch(Exception error){status.Text="Не удалось установить";MessageBox.Show(this,error.Message,"FlowBridge",MessageBoxButtons.OK,MessageBoxIcon.Information);}
-      finally{list.Enabled=true;install.Enabled=browser.CanInstall;if(!status.Text.StartsWith("Установлено"))Activate();}
+      finally{list.Enabled=true;install.Enabled=true;if(!status.Text.StartsWith("Установлено"))Activate();}
     }
   }
   static class Program {
     [STAThread]static int Main(string[] args) {
-      if(args.Length>=2&&args[0]=="--diagnose") {try{var rows=Engine.Detect();File.WriteAllLines(args[1],rows.Select(b=>b.Name+" | "+(b.Path==null?"not-found":"detected")+" | "+b.Status),Encoding.UTF8);return 0;}catch{return 1;}}
+      if(args.Length>=2&&args[0]=="--diagnose") {try{var rows=Engine.Detect();File.WriteAllLines(args[1],rows.Select(b=>b.Name+" | detected"),Encoding.UTF8);return 0;}catch{return 1;}}
       if(args.Length>=3&&(args[0]=="--install"||args[0]=="--check")) {var messages=new List<string>();try{var b=Engine.Detect().First(x=>x.Id==args[1]);messages.Add(args[0]=="--install"?Engine.Install(b,messages.Add):Engine.Check(b));File.WriteAllLines(args[2],messages,Encoding.UTF8);return 0;}catch(Exception x){messages.Add("ERROR: "+x.ToString());File.WriteAllLines(args[2],messages,Encoding.UTF8);return 1;}}
       Native.FreeConsole();Native.SetProcessDPIAware();Application.EnableVisualStyles();Application.SetCompatibleTextRenderingDefault(false);Application.Run(new SetupForm());return 0;
     }
