@@ -14,14 +14,15 @@ using System.Windows.Automation;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
-[assembly: System.Reflection.AssemblyVersion("0.1.2.0")]
-[assembly: System.Reflection.AssemblyFileVersion("0.1.2.0")]
-[assembly: System.Reflection.AssemblyInformationalVersion("0.1.2")]
+[assembly: System.Reflection.AssemblyVersion("0.1.3.0")]
+[assembly: System.Reflection.AssemblyFileVersion("0.1.3.0")]
+[assembly: System.Reflection.AssemblyInformationalVersion("0.1.3")]
 
 namespace FlowBridge {
   public sealed class Browser {
     public string Id, Name, ProcessName, Url, Path, Status;
     public bool CanInstall;
+    public IntPtr WindowHandle;
     public override string ToString(){return CanInstall?Name:Name+" — нужна подпись";}
   }
   public static class Native {
@@ -52,6 +53,16 @@ namespace FlowBridge {
       if(SendInput((uint)inputs.Length,inputs,Marshal.SizeOf(typeof(Input)))!=inputs.Length)throw new InvalidOperationException("Не удалось ввести адрес.");
     }
 
+    public delegate bool WindowCallback(IntPtr hwnd,IntPtr parameter);
+    [DllImport("user32.dll")] public static extern bool EnumWindows(WindowCallback callback,IntPtr parameter);
+    [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hwnd);
+    [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hwnd,out uint process);
+    public static IntPtr[] BrowserWindows(string processName) {
+      var ids=new HashSet<int>(Process.GetProcessesByName(processName).Select(p=>p.Id));
+      var windows=new List<IntPtr>();
+      EnumWindows((hwnd,parameter)=>{uint id;GetWindowThreadProcessId(hwnd,out id);if(ids.Contains((int)id)&&IsWindowVisible(hwnd))windows.Add(hwnd);return true;},IntPtr.Zero);
+      return windows.OrderByDescending(h=>h==GetForegroundWindow()).ToArray();
+    }
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
     [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] public static extern IntPtr GetAncestor(IntPtr h,uint flag);
@@ -83,7 +94,7 @@ namespace FlowBridge {
         }
         row.Status=row.Path==null?"Браузер не найден":"Готов к пробной установке";
       }
-      return rows;
+      return rows.Where(b=>b.Path!=null&&File.Exists(b.Path)).ToList();
     }
     static Browser Make(string id,string name,string process,string url,bool install,string[] paths) {
       string found=paths.FirstOrDefault(File.Exists);
@@ -148,52 +159,101 @@ namespace FlowBridge {
     static AutomationElement BrowserRoot(Browser browser,int timeout,bool extensions) {
       DateTime until=DateTime.UtcNow.AddSeconds(timeout);
       do {
-        foreach(var p in Process.GetProcessesByName(browser.ProcessName)) {
+        var handles=browser.WindowHandle!=IntPtr.Zero
+          ?new[]{browser.WindowHandle}
+          :Native.BrowserWindows(browser.ProcessName);
+        foreach(var hwnd in handles) {
           try {
-            if(p.MainWindowHandle==IntPtr.Zero)continue;
-            string title=p.MainWindowTitle.ToLowerInvariant();
-            if(extensions&&!title.Contains("расширени")&&!title.Contains("extensions")&&!title.Contains("дополнени"))continue;
-            Native.SetForegroundWindow(p.MainWindowHandle);
-            var root=AutomationElement.FromHandle(p.MainWindowHandle);
-            if(!extensions || Find(root,"devMode")!=null || Find(root,"loadUnpacked")!=null)return root;
+            var root=AutomationElement.FromHandle(hwnd);
+            if(root.Current.ProcessId==0||BrowserAddress(browser,root)==null)continue;
+            if(extensions&&Developer(root)==null&&LoadButton(root)==null)continue;
+            browser.WindowHandle=hwnd;
+            return root;
           }catch{}
         }
-        Thread.Sleep(250);
+        Thread.Sleep(200);
       }while(DateTime.UtcNow<until);
-      throw new InvalidOperationException("Страница расширений недоступна для автоматической установки. Можно установить вручную.");
+      throw new InvalidOperationException("Не удалось дождаться окна браузера. Повторите установку.");
+    }
+    static AutomationElement BrowserAddress(Browser browser,AutomationElement root) {
+      if(browser.Id=="firefox")return Find(root,"urlbar-input");
+      string id=browser.Id=="opera"?"view_1005":browser.Id=="yandex"?"view_1018":browser.Id=="edge"?"view_1017":browser.Id=="chrome"?"view_1012":"view_1020";
+      var address=Find(root,id);
+      if(address!=null&&address.Current.ControlType==ControlType.Edit)return address;
+      var edits=root.FindAll(TreeScope.Descendants,new PropertyCondition(AutomationElement.ControlTypeProperty,ControlType.Edit));
+      for(int i=0;i<edits.Count;i++){
+        var name=(edits[i].Current.Name??"").ToLowerInvariant();
+        if(name.Contains("адресная строка")||name.Contains("address")||name.Contains("поисковый запрос"))return edits[i];
+      }
+      return null;
+    }
+    static void ActivateBrowser(AutomationElement root) {
+      var hwnd=new IntPtr(root.Current.NativeWindowHandle);
+      if(Native.IsIconic(hwnd))Native.ShowWindow(hwnd,9);
+      Native.SetForegroundWindow(hwnd);Thread.Sleep(200);
+      if(Native.GetForegroundWindow()!=hwnd)throw new InvalidOperationException("Не удалось активировать окно браузера. Повторите установку.");
+    }
+    static void RequireBrowserFocus(AutomationElement root) {
+      if(Native.GetForegroundWindow()!=new IntPtr(root.Current.NativeWindowHandle))
+        throw new InvalidOperationException("Окно браузера потеряло фокус. Повторите установку.");
+    }
+    static int BrowserTabCount(AutomationElement root) {
+      var tabs=root.FindAll(TreeScope.Descendants,new PropertyCondition(AutomationElement.ControlTypeProperty,ControlType.TabItem));int count=0;
+      for(int i=0;i<tabs.Count;i++){
+        var parent=TreeWalker.ControlViewWalker.GetParent(tabs[i]);bool page=false;
+        while(parent!=null&&!Automation.Compare(parent,root)){
+          if(parent.Current.ControlType==ControlType.Document){page=true;break;}
+          parent=TreeWalker.ControlViewWalker.GetParent(parent);
+        }
+        if(!page)count++;
+      }
+      return count;
+    }
+    static bool YandexNewTab(Browser browser,AutomationElement root) {
+      return browser.Id=="yandex"&&(BrowserButton(root,"Закрыть новую вкладку")!=null||BrowserButton(root,"Close new tab")!=null);
     }
     static AutomationElement Open(Browser browser,string url) {return Navigate(browser,url,true);}
     static AutomationElement Navigate(Browser browser,string url,bool newTab) {
-      AutomationElement root;
+      AutomationElement root;bool started=false;
       try{root=BrowserRoot(browser,1,false);}
-      catch{Process.Start(new ProcessStartInfo(browser.Path){UseShellExecute=true});root=BrowserRoot(browser,15,false);}
-      var hwnd=new IntPtr(root.Current.NativeWindowHandle);
-      if(Native.IsIconic(hwnd))Native.ShowWindow(hwnd,9);Native.SetForegroundWindow(hwnd);Thread.Sleep(250);
-      if(Native.GetForegroundWindow()!=hwnd)throw new InvalidOperationException("Не удалось активировать окно браузера. Повторите установку.");
-      if(browser.Id=="opera"){
-        // A fresh tab gives Opera a clean address field; its current-address editor rejects UIA writes.
-        var operaTab=BrowserButton(root,"Новая вкладка")??BrowserButton(root,"New tab");object tabAction;
-        if(operaTab==null||!operaTab.TryGetCurrentPattern(InvokePattern.Pattern,out tabAction))throw new InvalidOperationException("Не удалось открыть новую вкладку Opera.");
-        ((InvokePattern)tabAction).Invoke();Thread.Sleep(500);
-        Native.TypeUnicode(url);
-      }else{
-        var createTab=BrowserButton(root,"Новая вкладка")??BrowserButton(root,"New tab");object invoke;
-        if(newTab){
-          if(createTab==null||!createTab.TryGetCurrentPattern(InvokePattern.Pattern,out invoke))throw new InvalidOperationException("Не удалось создать служебную вкладку. Открытые сайты сохранены.");
-          ((InvokePattern)invoke).Invoke();Thread.Sleep(350);
-        }
-        AutomationElement address=null;DateTime ready=DateTime.UtcNow.AddSeconds(10);
-        string addressId=browser.Id=="yandex"?"view_1018":browser.Id=="edge"?"view_1017":browser.Id=="chrome"?"view_1012":"view_1020";
-        do{address=Find(root,addressId);if(address!=null&&address.Current.ControlType==ControlType.Edit)break;address=null;Thread.Sleep(200);}while(DateTime.UtcNow<ready);
-        if(address==null){
-          var edits=root.FindAll(TreeScope.Descendants,new PropertyCondition(AutomationElement.ControlTypeProperty,ControlType.Edit));
-          for(int i=0;i<edits.Count;i++){var name=edits[i].Current.Name.ToLowerInvariant();if(name.Contains("адресная строка")||name.Contains("address")){address=edits[i];break;}}
-        }
-        if(address==null)throw new InvalidOperationException("Не удалось найти адресную строку браузера.");
-        address.SetFocus();((ValuePattern)address.GetCurrentPattern(ValuePattern.Pattern)).SetValue(url);
+      catch{
+        if(browser.WindowHandle!=IntPtr.Zero)throw;
+        // Pass the service URL on the first launch; do not race a second process against startup.
+        Process.Start(new ProcessStartInfo(browser.Path){Arguments=(browser.Id=="firefox"?"-new-tab ":"--new-tab ")+"\""+url+"\"",UseShellExecute=true});
+        started=true;root=BrowserRoot(browser,30,false);
       }
-      if(Native.GetForegroundWindow()!=hwnd)throw new InvalidOperationException("Окно браузера потеряло фокус. Повторите установку.");
-      SendKeys.SendWait("{ENTER}");Thread.Sleep(700);
+      var until=DateTime.UtcNow.AddSeconds(30);
+      while(BrowserAddress(browser,root)==null&&DateTime.UtcNow<until)Thread.Sleep(200);
+      if(BrowserAddress(browser,root)==null)throw new InvalidOperationException("Адресная строка браузера не готова.");
+      ActivateBrowser(root);Native.PressKey(27);
+      if(newTab&&!started){
+        int before=BrowserTabCount(root);
+        RequireBrowserFocus(root);Native.ControlKey(84);
+        until=DateTime.UtcNow.AddSeconds(8);
+        // Yandex keeps its new-tab overlay outside the tab-item list until navigation.
+        while(BrowserTabCount(root)<=before&&!YandexNewTab(browser,root)&&DateTime.UtcNow<until)Thread.Sleep(150);
+        if(BrowserTabCount(root)<=before&&!YandexNewTab(browser,root))throw new InvalidOperationException("Не удалось создать служебную вкладку. Открытые сайты сохранены.");
+      }
+      bool entered=false;
+      for(int attempt=0;attempt<3&&!entered;attempt++){
+        RequireBrowserFocus(root);Native.ControlKey(76);Thread.Sleep(200);
+        var address=BrowserAddress(browser,root);object pattern;
+        if(address==null||!address.TryGetCurrentPattern(ValuePattern.Pattern,out pattern))
+          throw new InvalidOperationException("Адресная строка браузера недоступна.");
+        var value=(ValuePattern)pattern;
+        RequireBrowserFocus(root);
+        if(browser.Id=="opera")Native.TypeUnicode(url);
+        else{try{value.SetValue(url);}catch{Native.TypeUnicode(url);}}
+        var addressUntil=DateTime.UtcNow.AddSeconds(3);
+        do{
+          Thread.Sleep(100);
+          address=BrowserAddress(browser,root);
+          if(address!=null&&address.TryGetCurrentPattern(ValuePattern.Pattern,out pattern))
+            entered=String.Equals(((ValuePattern)pattern).Current.Value,url,StringComparison.Ordinal);
+        }while(!entered&&DateTime.UtcNow<addressUntil);
+      }
+      if(!entered)throw new InvalidOperationException("Браузер не подтвердил введённый адрес. Повторите установку.");
+      RequireBrowserFocus(root);Native.PressKey(13);Thread.Sleep(850);
       return root;
     }
     static void Reload(AutomationElement root) {
@@ -252,12 +312,18 @@ namespace FlowBridge {
       try {
         var root=BrowserRoot(browser,5,false);
         string id=ExtensionId(root);
-        // Reuse only our installation tab. The extension closes it after preparing Flow.
-        if(browser.Id=="opera"||browser.Id=="yandex"){
-          Process.Start(new ProcessStartInfo(browser.Path){Arguments="--new-tab \"chrome-extension://"+id+"/complete.html?closePrevious=1\"",UseShellExecute=true});
-        }else Navigate(browser,"chrome-extension://"+id+"/complete.html",false);
-        log("Подготовка новой вкладки Flow запущена в "+browser.Name);
-        return "Установлено";
+        // Reuse our service tab in the same window, including Opera and Yandex.
+        Navigate(browser,"chrome-extension://"+id+"/complete.html",false);
+        var until=DateTime.UtcNow.AddSeconds(20);
+        do{
+          var address=BrowserAddress(browser,root);object value;
+          if(address!=null&&address.TryGetCurrentPattern(ValuePattern.Pattern,out value)&&
+            Regex.IsMatch(((ValuePattern)value).Current.Value,@"^(https://)?flow\.google\.com(?:[/?#]|$)",RegexOptions.IgnoreCase)){
+            log("Новая вкладка Flow подтверждена в "+browser.Name);return "Установлено";
+          }
+          Thread.Sleep(200);
+        }while(DateTime.UtcNow<until);
+        throw new InvalidOperationException("Браузер не подтвердил открытие новой вкладки Flow.");
       } catch(Exception error) {
         log("Расширение установлено, но подготовка Flow не запущена: "+error.Message);
         return "Установлено. Откройте Flow вручную.";

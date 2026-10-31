@@ -37,19 +37,7 @@ namespace FlowBridge {
       Thread.Sleep(350);
     }
     static AutomationElement FirefoxNavigate(Browser browser,string url,bool newTab) {
-      AutomationElement root;
-      try{root=BrowserRoot(browser,1,false);}
-      catch{Process.Start(new ProcessStartInfo(browser.Path){UseShellExecute=true});root=BrowserRoot(browser,15,false);}
-      var hwnd=new IntPtr(root.Current.NativeWindowHandle);
-      if(Native.IsIconic(hwnd))Native.ShowWindow(hwnd,9);
-      Native.SetForegroundWindow(hwnd);Thread.Sleep(250);
-      if(Native.GetForegroundWindow()!=hwnd)throw new InvalidOperationException("Firefox потерял фокус.");
-      Native.PressKey(27);
-      if(newTab){Process.Start(new ProcessStartInfo(browser.Path){Arguments="-new-tab \""+url+"\"",UseShellExecute=true});Thread.Sleep(900);return BrowserRoot(browser,10,false);}
-      if(Find(root,"urlbar-input")==null)throw new InvalidOperationException("Адресная строка Firefox недоступна.");
-      Native.ControlKey(76);Thread.Sleep(150);Native.TypeUnicode(url);
-      if(Native.GetForegroundWindow()!=hwnd)throw new InvalidOperationException("Firefox потерял фокус.");
-      Native.PressKey(13);Thread.Sleep(850);return root;
+      return Navigate(browser,url,newTab);
     }
     static AutomationElement FirefoxWait(AutomationElement root,string id,string russian,string english,int seconds) {
       var until=DateTime.UtcNow.AddSeconds(seconds);
@@ -147,8 +135,9 @@ namespace FlowBridge {
       var confirm=FirefoxWait(root,null,"Добавить","Add",3);
       var until=DateTime.UtcNow.AddSeconds(8);
       while(confirm!=null&&!confirm.Current.IsEnabled&&DateTime.UtcNow<until)Thread.Sleep(200);
-      FirefoxActivate(confirm,root);
+      FirefoxActivate(confirm,root);log("Подтверждение установки XPI отправлено.");
       var installedNotice=FirefoxWait(root,"addon-install-description",null,null,10);
+      log(installedNotice!=null?"Firefox показал уведомление об установке.":"Уведомление об установке Firefox не появилось.");
       if(installedNotice!=null){var okay=FirefoxWait(root,null,"OK","Okay",2)??FirefoxWait(root,null,"Хорошо",null,1);if(okay!=null)FirefoxActivate(okay,root);}
       // An old card can remain in the accessibility tree during XPI replacement.
       // Reopen the manager in the same service tab, then verify the actual version.
