@@ -25,6 +25,8 @@ Windows-файлы и подписанный Firefox XPI не меняются. 
 
 Safari использует cookies, доступные его API, без Chromium-фильтра `partitionKey`. Доступность всех разделённых cookies не подтверждена. Общие cookies `.google.com` не изменяются.
 
+Упаковщик Xcode предупреждает о ключах `world` и `persistent`. В данных совместимости MDN ключ `content_scripts.world` указан для Safari 18+, но такое предупреждение нельзя считать доказательством работы. Обязательный ручной тест должен подтвердить выполнение engine.js до кода Flow в основном мире страницы. Автоматическая проверка WebKit запускает сам адаптер через нативный document_start user script и не заменяет этот тест Safari-расширения.
+
 Источники Apple:
 
 - https://developer.apple.com/documentation/safariservices/running-your-safari-web-extension

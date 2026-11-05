@@ -19,6 +19,10 @@ jobs:
           persist-credentials: false
       - name: Build and verify Universal 2 installer
         run: bash macos/build-app.sh
+      - name: Check adapter in macOS WebKit
+        run: |
+          xcrun swiftc -swift-version 5 -framework AppKit -framework WebKit macos/tests/WebKitCore.swift -o package/macos-dist/WebKitCoreCheck
+          package/macos-dist/WebKitCoreCheck src/adapter.cjs
       - name: Compile Safari extension container
         run: bash macos/build-safari.sh
       - name: Upload test packages
@@ -26,6 +30,10 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: FlowBridge-macOS-preview
-          path: package/macos-dist/
+          path: |
+            package/macos-dist/*.zip
+            package/macos-dist/*.json
+            package/macos-dist/*.xpi
+            package/macos-dist/README.md
           if-no-files-found: error
           retention-days: 30

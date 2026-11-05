@@ -34,7 +34,7 @@ import plistlib,sys
 with open(sys.argv[1], 'wb') as out:
     plistlib.dump(dict(CFBundleExecutable='FlowBridge', CFBundleIdentifier='org.flowbridge.macos.preview',
         CFBundleName='FlowBridge', CFBundlePackageType='APPL', CFBundleShortVersionString='0.2.0',
-        CFBundleVersion='0.2.0.1', CFBundleIconFile='FlowBridge.icns', LSMinimumSystemVersion='13.0', NSHighResolutionCapable=True), out)
+        CFBundleVersion='20001', CFBundleIconFile='FlowBridge.icns', LSMinimumSystemVersion='13.0', NSHighResolutionCapable=True), out)
 PY
 codesign --force --sign - "$app"
 codesign --verify --deep --strict "$app"
@@ -50,4 +50,5 @@ ditto -c -k --sequesterRsrc --keepParent "$app" "$dist/FlowBridge-macOS-Preview.
 ditto -c -k --keepParent package/macos/safari "$dist/FlowBridge-Safari-Temporary.zip"
 ditto -c -k --keepParent package/macos/chromium "$dist/FlowBridge-Chromium-Mac-Preview.zip"
 cp macos/README.md "$dist/README.md"
+cp package/macos/FlowBridge-0.1.1-signed.xpi "$dist/"
 printf '%s\n' 'Built Universal 2 macOS preview. UI installation and live Flow require human testing.'

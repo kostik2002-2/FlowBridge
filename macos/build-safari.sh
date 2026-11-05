@@ -17,6 +17,24 @@ assert len(projects)==1, projects
 print(projects[0])
 PY
 )"
+# The converter can derive a different app ID from the display name. Normalize the
+# two target IDs before building so the extension is prefixed by its containing app.
+python3 - "$project_file/project.pbxproj" <<'PY'
+import json,subprocess,plistlib,sys
+file=sys.argv[1]
+data=json.loads(subprocess.check_output(['plutil','-convert','json','-o','-',file]))
+objects=data['objects']
+for target in objects.values():
+    if target.get('isa')!='PBXNativeTarget': continue
+    kind=target.get('productType','')
+    if kind=='com.apple.product-type.application': identifier='org.flowbridge.safari.preview'
+    elif kind=='com.apple.product-type.app-extension': identifier='org.flowbridge.safari.preview.Extension'
+    else: continue
+    configs=objects[target['buildConfigurationList']]['buildConfigurations']
+    for config in configs:
+        objects[config].setdefault('buildSettings',{})['PRODUCT_BUNDLE_IDENTIFIER']=identifier
+with open(file,'wb') as out: plistlib.dump(data,out,sort_keys=False)
+PY
 xcodebuild -list -json -project "$project_file" > "$project/schemes.json"
 scheme="$(python3 - "$project/schemes.json" <<'PY'
 import json,sys
@@ -28,8 +46,18 @@ PY
 )"
 xcodebuild -project "$project_file" -scheme "$scheme" -configuration Release \
   -derivedDataPath "$root/package/safari-derived" CODE_SIGNING_ALLOWED=NO \
-  'ARCHS=arm64 x86_64' ONLY_ACTIVE_ARCH=NO build
+  'ARCHS=arm64 x86_64' ONLY_ACTIVE_ARCH=NO MACOSX_DEPLOYMENT_TARGET=13.0 build
 container="$root/package/safari-derived/Build/Products/Release/FlowBridge Safari Preview.app"
 test -d "$container"
+python3 - "$container" <<'PY'
+import plistlib,pathlib,sys
+app=pathlib.Path(sys.argv[1])
+info=plistlib.load(open(app/'Contents/Info.plist','rb'))
+extensions=list((app/'Contents/PlugIns').glob('*.appex'))
+assert len(extensions)==1, extensions
+extension=plistlib.load(open(extensions[0]/'Contents/Info.plist','rb'))
+assert extension['CFBundleIdentifier'].startswith(info['CFBundleIdentifier']+'.')
+print('Safari bundle identifiers verified:',info['CFBundleIdentifier'],extension['CFBundleIdentifier'])
+PY
 ditto -c -k --sequesterRsrc --keepParent "$container" "$root/package/macos-dist/FlowBridge-Safari-Unsigned-Preview.zip"
 printf '%s\n' 'Safari container compiled unsigned. Safari must allow unsigned extensions to load it.'
