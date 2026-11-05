@@ -1,0 +1,13 @@
+<!doctype html><script>
+var calls = 0;
+var _ = {M: function (object, field) { calls++; return object[field]; }};
+window.default_AiSandboxAngularFrontend = {W: function (fn) { return fn; }};
+var factory = window.default_AiSandboxAngularFrontend.W;
+var country = factory(function(){const c=this.config();let x=_.M(c,31);return x!=null?x:!0;});
+var age = factory(function(){const c=this.config();let x=_.M(c,32);return x!=null?x:!0;});
+var config = {config: function(){return {31:false,32:false};}};
+var countryResult = country.call(config);
+var ageResult = age.call(config);
+window.flowBridgeFixtureAdapter.dispose();
+window.fixtureResult = {country:countryResult,age:ageResult,afterDispose:country.call(config),originalEvaluated:calls===3};
+</script>

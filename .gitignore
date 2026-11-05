@@ -3,3 +3,7 @@
 /installer/Payload.cs
 /research/
 *.log
+/package/macos/
+/package/macos-dist/
+/package/safari-xcode/
+/package/safari-derived/
