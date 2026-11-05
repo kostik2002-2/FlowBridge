@@ -34,6 +34,19 @@ test('Firefox signature input is identical to the production signed XPI', () => 
   assert.deepEqual(signed, fs.readFileSync(path.join(root, 'package/signing/FlowBridge-0.1.1-signed.xpi')));
 });
 
+test('the shared native WebKit fixture exercises the exact country matcher and restores it', () => {
+  const win = {}; win.window = win;
+  vm.createContext(win);
+  const adapter = fs.readFileSync(path.join(root, 'src/adapter.cjs'), 'utf8');
+  vm.runInContext('const module={exports:{}};\n' + adapter + '\nwindow.flowBridgeFixtureAdapter=module.exports.attachAdapter(window,()=>{});', win);
+  const html = fs.readFileSync(path.join(__dirname, 'fixture.html'), 'utf8');
+  vm.runInContext(html.match(/<script>([\s\S]*)<\/script>/)[1], win);
+  assert.equal(win.fixtureResult.country, true);
+  assert.equal(win.fixtureResult.age, false);
+  assert.equal(win.fixtureResult.afterDispose, false);
+  assert.equal(win.fixtureResult.originalEvaluated, true);
+});
+
 function harness(flavor, { permission = true, request = true, oldFlow = true, createFailure = false, cookieFailure = false } = {}) {
   const operations = [];
   let click;

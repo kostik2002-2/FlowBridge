@@ -22,7 +22,7 @@ jobs:
       - name: Check adapter in macOS WebKit
         run: |
           xcrun swiftc -swift-version 5 -framework AppKit -framework WebKit macos/tests/WebKitCore.swift -o package/macos-dist/WebKitCoreCheck
-          package/macos-dist/WebKitCoreCheck src/adapter.cjs
+          package/macos-dist/WebKitCoreCheck src/adapter.cjs macos/tests/fixture.html
       - name: Compile Safari extension container
         run: bash macos/build-safari.sh
       - name: Upload test packages

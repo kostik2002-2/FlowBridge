@@ -33,21 +33,7 @@ app.setActivationPolicy(.prohibited)
 let check = Check()
 check.view = WKWebView(frame: .zero, configuration: config)
 check.view.navigationDelegate = check
-let html = """
-<!doctype html><script>
-var calls = 0;
-var _ = {M: function (object, field) { calls++; return object[field]; }};
-window.default_AiSandboxAngularFrontend = {W: function (fn) { return fn; }};
-var factory = window.default_AiSandboxAngularFrontend.W;
-var country = factory(function(){let x=_.M(this.config(),31);return x!=null?x:!0;});
-var age = factory(function(){let x=_.M(this.config(),32);return x!=null?x:!0;});
-var config = {config: function(){return {31:false,32:false};}};
-var countryResult = country.call(config);
-var ageResult = age.call(config);
-window.flowBridgeFixtureAdapter.dispose();
-window.fixtureResult = {country:countryResult,age:ageResult,afterDispose:country.call(config),originalEvaluated:calls===3};
-</script>
-"""
+let html = try String(contentsOfFile: CommandLine.arguments[2], encoding: .utf8)
 check.view.loadHTMLString(html, baseURL: URL(string: "https://flow.google.com/fixture"))
 Timer.scheduledTimer(withTimeInterval: 45, repeats: false) { _ in
     print("WebKit fixture timed out; no interactive Safari compatibility result is available")

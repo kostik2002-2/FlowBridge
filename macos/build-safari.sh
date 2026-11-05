@@ -59,5 +59,15 @@ extension=plistlib.load(open(extensions[0]/'Contents/Info.plist','rb'))
 assert extension['CFBundleIdentifier'].startswith(info['CFBundleIdentifier']+'.')
 print('Safari bundle identifiers verified:',info['CFBundleIdentifier'],extension['CFBundleIdentifier'])
 PY
+# Ad-hoc signing permits local development execution; it is not an Apple Developer
+# signature and Safari still needs its explicit Allow Unsigned Extensions setting.
+for extension in "$container/Contents/PlugIns/"*.appex; do codesign --force --sign - "$extension"; done
+codesign --force --sign - "$container"
+codesign --verify --deep --strict "$container"
+installer="$root/package/macos-dist/FlowBridge-Setup.app"
+cp -R "$container" "$installer/Contents/Resources/"
+codesign --force --sign - "$installer"
+codesign --verify --deep --strict "$installer"
+ditto -c -k --sequesterRsrc --keepParent "$installer" "$root/package/macos-dist/FlowBridge-macOS-Preview.zip"
 ditto -c -k --sequesterRsrc --keepParent "$container" "$root/package/macos-dist/FlowBridge-Safari-Unsigned-Preview.zip"
 printf '%s\n' 'Safari container compiled unsigned. Safari must allow unsigned extensions to load it.'
