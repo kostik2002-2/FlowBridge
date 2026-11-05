@@ -9,7 +9,7 @@ struct BrowserChoice {
 }
 
 final class Installer: NSObject, NSApplicationDelegate {
-    private let choices = [
+    static let choices = [
         BrowserChoice(name: "Safari", bundleID: "com.apple.Safari", kind: "safari", manager: ""),
         BrowserChoice(name: "Google Chrome", bundleID: "com.google.Chrome", kind: "chromium", manager: "chrome://extensions/"),
         BrowserChoice(name: "Comet", bundleID: "ai.perplexity.comet", kind: "chromium", manager: "chrome://extensions/"),
@@ -25,7 +25,7 @@ final class Installer: NSObject, NSApplicationDelegate {
     private let status = NSTextField(wrappingLabelWithString: "")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        installed = choices.compactMap { choice in
+        installed = Self.choices.compactMap { choice in
             guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: choice.bundleID),
                   Bundle(url: url)?.bundleIdentifier == choice.bundleID else { return nil }
             return (choice, url)
@@ -144,8 +144,18 @@ final class Installer: NSObject, NSApplicationDelegate {
     }
 }
 
-let app = NSApplication.shared
-app.setActivationPolicy(.regular)
-let installer = Installer()
-app.delegate = installer
-app.run()
+if CommandLine.arguments.contains("--diagnose") {
+    let rows = Installer.choices.compactMap { choice -> [String: String]? in
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: choice.bundleID),
+              Bundle(url: url)?.bundleIdentifier == choice.bundleID else { return nil }
+        return ["name": choice.name, "bundleID": choice.bundleID]
+    }
+    let data = try JSONSerialization.data(withJSONObject: rows, options: [.prettyPrinted, .sortedKeys])
+    print(String(data: data, encoding: .utf8)!)
+} else {
+    let app = NSApplication.shared
+    app.setActivationPolicy(.regular)
+    let installer = Installer()
+    app.delegate = installer
+    app.run()
+}

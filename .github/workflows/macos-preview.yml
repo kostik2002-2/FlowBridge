@@ -6,6 +6,9 @@ on:
     paths: ['macos/**', '.github/workflows/macos-preview.yml']
 permissions:
   contents: read
+concurrency:
+  group: macos-preview-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
 jobs:
   macos:
     runs-on: macos-latest
@@ -23,8 +26,6 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: FlowBridge-macOS-preview
-          path: |
-            package/macos-dist/*.zip
-            package/safari-xcode/**/*.xcodeproj/**
+          path: package/macos-dist/
           if-no-files-found: error
           retention-days: 30
